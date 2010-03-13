@@ -1,0 +1,7 @@
+*.pyc
+*.pyo
+*~
+\#*
+.project
+.pydev*
+.eclipse*
