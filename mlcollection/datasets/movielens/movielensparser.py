@@ -15,7 +15,7 @@ ITEM_FILE = os.path.join(THIS_DIR, 'u.item')
 OCCUPATION_FILE = os.path.join(THIS_DIR, 'u.occupation')
 USER_FILE = os.path.join(THIS_DIR, 'u.user')
 
-__author__ == 'Paul Osborne <osbpau@gmail.com>'
+__author__ = 'Paul Osborne <osbpau@gmail.com>'
 
 class MovieLensParser(object):
     """Parser for movielens data set
