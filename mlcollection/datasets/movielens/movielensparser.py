@@ -29,8 +29,10 @@ class MovieLensParser(object):
         self.genre_by_id = self._parse_genre()
         self.user_by_id = self._parse_user()
         self.movies_by_id = self._parse_movies()
-        self.ratings_by_userid, self.ratings_by_movieid = self._parse_ratings()
-    
+        ratings_by_userid, ratings_by_movieid = self._parse_ratings()
+        self.ratings_by_userid = ratings_by_userid
+        self.ratings_by_movieid = ratings_by_movieid
+        
     def _parse_user(self):
         users_by_id = {}
         with open(USER_FILE) as user_file:
