@@ -7,6 +7,7 @@
    you probably don't want to have too many of these guys laying around.
 """
 import os
+import StringIO
 
 THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 DATA_FILE = os.path.join(THIS_DIR, 'u.data')
@@ -29,9 +30,10 @@ class MovieLensParser(object):
         self.genre_by_id = self._parse_genre()
         self.user_by_id = self._parse_user()
         self.movies_by_id = self._parse_movies()
-        ratings_by_userid, ratings_by_movieid = self._parse_ratings()
+        ratings_by_userid, ratings_by_movieid, ratings = self._parse_ratings()
         self.ratings_by_userid = ratings_by_userid
         self.ratings_by_movieid = ratings_by_movieid
+        self.ratings = ratings
         
     def _parse_user(self):
         users_by_id = {}
@@ -63,12 +65,14 @@ class MovieLensParser(object):
                 if line:
                     items = tuple(line.split('|'))
                     movie = MovieLensMovie(*items)
+                    movie.genre_bits = [int(x) for x in items[-len(MovieLensMovie.GENRE_KEYS):]]
                     movies[movie.id] = movie
         return movies
 
     def _parse_ratings(self):
         ratings_by_userid = {}
         ratings_by_movieid = {}
+        ratings = []
         with open(DATA_FILE, 'r') as data_file:
             for line in data_file:
                 line.strip()
@@ -78,7 +82,8 @@ class MovieLensParser(object):
                     ratings_by_movieid.setdefault(rating.movie_id, set())
                     ratings_by_userid[rating.user_id].add(rating)
                     ratings_by_movieid[rating.movie_id].add(rating)
-        return ratings_by_userid, ratings_by_movieid
+                    ratings.append(rating)
+        return ratings_by_userid, ratings_by_movieid, ratings
 
 class MovieLensRating(object):
     """Encapsulate movie rating data"""
@@ -180,7 +185,81 @@ class MovieLensMovie(object):
     def __hash__(self):
         return hash(self.id)
 
+def sql_esacpe(s):
+    return s.replace("'", "''")
+
+def good_movieid(mid):
+    return 100 <= mid <= 125
+
+def insert_into_movie(parser):
+    movies_by_id = parser.movies_by_id
+    output = StringIO.StringIO()
+    for mid, movie in movies_by_id.items():
+        if not good_movieid(mid):
+            continue
+
+        try:
+            ryear = int(movie.release_date.split('-')[-1])
+        except:
+            ryear = "NULL"
+        title = sql_esacpe(movie.title)
+        output.write("INSERT INTO MOVIE (Movie_Id, Movie_Title, Movie_ReleaseYear)\n"
+                     "VALUES (%s, '%s', %s);\n" % (mid, movie.title, ryear))
+    
+    return output.getvalue()
+
+def insert_into_user(parser):
+    output = StringIO.StringIO()
+    for uid, user in parser.user_by_id.items():
+        output.write("INSERT INTO REVIEWER (Reviewer_Id, Reviewer_Age, Reviewer_Gender, Reviewer_Occupation, Reviewer_Zipcode)\n"
+                     "VALUES ({uid}, {age}, '{gender}', '{occupation}', '{zipcode}');\n"
+                     .format(uid=uid,
+                             age=user.age,
+                             gender=user.gender,
+                             occupation=user.occupation,
+                             zipcode=user.zipcode))
+    return output.getvalue()
+
+def insert_into_genre(parser):
+    output = StringIO.StringIO()
+    for gid, genre in parser.genre_by_id.items():
+        output.write("INSERT INTO GENRE (Genre_Id, Genre_Name)\n"
+                     "VALUES ({gid}, '{genre_name}');\n"
+                     .format(gid=gid,
+                             genre_name=sql_esacpe(genre)))
+    return output.getvalue()
+
+def insert_into_movie_genre(parser):
+    output = StringIO.StringIO()
+    for mid, movie in parser.movies_by_id.items():
+        if not good_movieid(mid):
+            continue
+        for i, bit in enumerate(movie.genre_bits):
+            if not bit:
+                continue
+            output.write("INSERT INTO MOVIE_GENRE (Movie_id, Genre_Id)\n"
+                         "VALUES ({mid}, {gid});\n".format(mid=mid, gid=i))
+    return output.getvalue()
+
+def insert_into_rating(parser):
+    output = StringIO.StringIO()
+    print len(parser.ratings)
+    for rating in parser.ratings:
+        if not good_movieid(rating.movie_id):
+            continue
+        
+        output.write("INSERT INTO rating (Movie_Id, Reviewer_Id, Rating, Rating_Timestamp)\n"
+                     "VALUES ({movie_id}, {user_id}, {rating}, {timestamp});\n"
+                     .format(movie_id=rating.movie_id,
+                             user_id=rating.user_id,
+                             rating=rating.rating,
+                             timestamp=rating.timestamp))
+    return output.getvalue()
+
 if __name__ == '__main__':
     parser = MovieLensParser()
-    for rating in parser.ratings_by_userid[35]:
-        print rating.movie_id, parser.movies_by_id[rating.movie_id].title
+    print insert_into_genre(parser)
+    print insert_into_movie(parser)
+    print insert_into_movie_genre(parser)
+    print insert_into_user(parser)
+    print insert_into_rating(parser)
